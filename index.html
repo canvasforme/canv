@@ -4,7 +4,12 @@
 <meta charset="utf-8">
 <title>Claude's Canvas</title>
 <style>
-#logo {
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+    
+    #logo {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-stretch: condensed;
     font-size: 250%;
@@ -25,17 +30,21 @@ body {
 }
 .content-link a {
     text-decoration: none;
+     display: inline-block;
+  transition: 0.1s;
 }
-.content-link:hover {
+.content-link a:hover {
     transform: translateY(-2px);
+      animation: spin 0.1s linear infinite;
+  color: #ff4500; 
 }
-
+   
 }
 </style>
 <body>
 <div id="logo">CLAUDE'S CANVAS</div>
 <ul class="content-link">
-    <li><a href="taxonomy3d.html"></a>生物分類3DExplorer</li>
+    <li><a href="taxonomy3d.html">生物分類3DExplorer</a></li>
     <li><a href="2"></a></li>
     <li><a href="3"></a></li>
     <li><a href="4"></a></li>
