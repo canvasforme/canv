@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+  <!--CREATED BY CLAUDE-->
+  
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Explorer for science</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;700&family=Shippori+Mincho:wght@400;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+–plant-primary: #2d6a4f;
+–plant-accent: #74c69d;
+–plant-glow: #52b788;
+–animal-primary: #1a3a5c;
+–animal-accent: #4fc3f7;
+–animal-glow: #29b6f6;
+–bg: #080c10;
+–surface: rgba(255,255,255,0.04);
+–border: rgba(255,255,255,0.08);
+–text: #e8f0fe;
+–text-dim: rgba(232,240,254,0.5);
+}
+
+html, body { width: 100%; height: 100%; background: var(–bg); overflow: hidden; font-family: ‘Zen Kaku Gothic New’, sans-serif; color: var(–text); }
+
+#app { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; }
+
+/* ── Header ── */
+header {
+position: relative; z-index: 20; padding: 14px 24px 0;
+display: flex; align-items: center; justify-content: space-between;
+background: linear-gradient(180deg, rgba(8,12,16,0.95) 0%, transparent 100%);
+pointer-events: none;
+}
+.logo { font-family: ‘Shippori Mincho’, serif; font-size: 1.05rem; letter-spacing: 0.15em; color: var(–text-dim); }
+.logo span { color: var(–text); font-weight: 600; }
+
+/* ── Tab ── */
+.tabs {
+position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+z-index: 30; display: flex; gap: 4px;
+background: rgba(255,255,255,0.05); border: 1px solid var(–border);
+border-radius: 100px; padding: 4px; pointer-events: all;
+backdrop-filter: blur(12px);
+}
+.tab {
+padding: 8px 26px; border-radius: 100px; border: none; cursor: pointer;
+font-family: ‘Zen Kaku Gothic New’, sans-serif; font-size: 0.88rem; font-weight: 700;
+letter-spacing: 0.08em; transition: all 0.35s cubic-bezier(.4,0,.2,1);
+color: var(–text-dim); background: transparent;
+}
+.tab.active-plant { background: var(–plant-primary); color: #fff; box-shadow: 0 0 20px rgba(82,183,136,0.4); }
+.tab.active-animal { background: var(–animal-primary); color: #fff; box-shadow: 0 0 20px rgba(41,182,246,0.4); }
+
+/* ── Canvas ── */
+#canvas-container { flex: 1; position: relative; }
+#canvas-container canvas { display: block; }
+
+/* ── Controls hint ── */
+.hint {
+position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+z-index: 20; display: flex; gap: 16px; pointer-events: none;
+}
+.hint-item {
+display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(–text-dim);
+background: rgba(255,255,255,0.04); border: 1px solid var(–border);
+padding: 6px 12px; border-radius: 100px; backdrop-filter: blur(8px);
+}
+.hint-icon { font-size: 0.85rem; }
+
+/* ── Modal / Detail Panel ── */
+.panel-overlay {
+position: fixed; inset: 0; z-index: 100;
+display: flex; align-items: flex-end; justify-content: center;
+pointer-events: none; opacity: 0; transition: opacity 0.3s;
+}
+.panel-overlay.open { opacity: 1; pointer-events: all; }
+.panel-overlay.open .panel { transform: translateY(0); }
+
+.panel-bg {
+position: absolute; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+}
+.panel {
+position: relative; z-index: 1;
+width: 100%; max-width: 580px; max-height: 75vh;
+background: linear-gradient(160deg, rgba(14,22,32,0.98) 0%, rgba(8,12,16,0.99) 100%);
+border: 1px solid var(–border); border-bottom: none;
+border-radius: 24px 24px 0 0;
+padding: 28px 28px 40px;
+overflow-y: auto; overflow-x: hidden;
+transform: translateY(100%); transition: transform 0.45s cubic-bezier(.4,0,.2,1);
+}
+
+.panel-handle {
+width: 40px; height: 4px; background: var(–border); border-radius: 2px;
+margin: 0 auto 22px;
+}
+
+.panel-badge {
+display: inline-flex; align-items: center; gap: 6px;
+font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em;
+padding: 4px 10px; border-radius: 100px; margin-bottom: 10px;
+text-transform: uppercase;
+}
+.badge-plant { background: rgba(82,183,136,0.15); color: var(–plant-accent); border: 1px solid rgba(82,183,136,0.3); }
+.badge-animal { background: rgba(41,182,246,0.15); color: var(–animal-accent); border: 1px solid rgba(41,182,246,0.3); }
+
+.panel h2 { font-family: ‘Shippori Mincho’, serif; font-size: 1.6rem; font-weight: 600; margin-bottom: 6px; line-height: 1.3; }
+.panel .subtitle { font-size: 0.82rem; color: var(–text-dim); margin-bottom: 20px; letter-spacing: 0.05em; }
+
+.panel-desc { font-size: 0.92rem; line-height: 1.85; color: rgba(232,240,254,0.85); margin-bottom: 22px; }
+
+.section-title {
+font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em;
+text-transform: uppercase; color: var(–text-dim); margin-bottom: 10px;
+}
+
+.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.example-chip {
+padding: 5px 14px; border-radius: 100px; font-size: 0.82rem;
+background: var(–surface); border: 1px solid var(–border);
+transition: all 0.2s;
+}
+
+.features { display: flex; flex-direction: column; gap: 8px; }
+.feature {
+display: flex; align-items: flex-start; gap: 12px;
+padding: 10px 14px; border-radius: 12px;
+background: var(–surface); border: 1px solid var(–border);
+}
+.feature-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+.feature-text { font-size: 0.85rem; line-height: 1.6; color: rgba(232,240,254,0.8); }
+
+.panel-close {
+position: absolute; top: 20px; right: 20px;
+width: 32px; height: 32px; border-radius: 50%;
+background: var(–surface); border: 1px solid var(–border);
+color: var(–text-dim); font-size: 1rem; cursor: pointer;
+display: flex; align-items: center; justify-content: center;
+transition: all 0.2s;
+}
+.panel-close:hover { background: rgba(255,255,255,0.1); color: var(–text); }
+
+/* ── Node tooltip (hover) ── */
+#tooltip {
+position: fixed; z-index: 50; pointer-events: none;
+padding: 8px 14px; border-radius: 10px;
+background: rgba(14,22,32,0.92); border: 1px solid var(–border);
+font-size: 0.82rem; backdrop-filter: blur(8px);
+opacity: 0; transition: opacity 0.15s;
+white-space: nowrap;
+}
+
+/* Scrollbar */
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb { background: var(–border); border-radius: 2px; }
+</style>
+
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo"><span>生物分類</span> 3D Explorer</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active-plant" onclick="switchTab('plant')">🌿 植物</button>
+    <button class="tab" onclick="switchTab('animal')">🦎 動物</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div class="hint">
+    <div class="hint-item"><span class="hint-icon">👆</span>ドラッグで回転</div>
+    <div class="hint-item"><span class="hint-icon">🤏</span>ピンチ/ホイールでズーム</div>
+    <div class="hint-item"><span class="hint-icon">✨</span>ノードをタップで詳細</div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<!-- Detail Panel -->
+
+<div class="panel-overlay" id="panel-overlay">
+  <div class="panel-bg" onclick="closePanel()"></div>
+  <div class="panel" id="detail-panel">
+    <div class="panel-handle"></div>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div id="panel-content"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════
+const PLANT_DATA = {
+  id: 'root', label: '植物界', en: 'Plantae', level: 0,
+  desc: '光合成によってエネルギーを得る真核生物の一群。地球上の酸素の大部分を生産し、陸上生態系の基盤を担います。',
+  features: [
+    { icon: '☀️', text: '光合成：二酸化炭素と水から糖を合成し、酸素を放出する' },
+    { icon: '🌱', text: '細胞壁：セルロースで構成され、細胞を保護する' },
+    { icon: '🍃', text: '葉緑素：光のエネルギーを化学エネルギーに変換する色素' },
+  ],
+  examples: ['コケ', 'シダ', 'サクラ', 'マツ', 'スギ', 'イネ'],
+  children: [
+    {
+      id: 'vascular', label: '維管束植物', en: 'Tracheophyta', level: 1,
+      desc: '水や養分を運ぶ維管束（道管・師管）を持つ植物の総称。陸上植物の大部分を占め、多様な環境に適応しています。',
+      features: [
+        { icon: '🚿', text: '道管：根から葉へ水・無機塩類を運ぶ管' },
+        { icon: '🍬', text: '師管：葉で作った糖を全身へ分配する管' },
+        { icon: '🌳', text: '大型化が可能：木本植物として高木になれる' },
+      ],
+      examples: ['シダ植物', '種子植物全般'],
+      children: [
+        {
+          id: 'fern', label: 'シダ植物', en: 'Pteridophyta', level: 2,
+          desc: '種子を作らず、胞子で増殖する維管束植物。約3億年前の石炭紀に大繁栄し、当時は巨大な樹木状でした。',
+          features: [
+            { icon: '💨', text: '胞子繁殖：種子ではなく胞子（スポア）で増える' },
+            { icon: '💧', text: '受精に水が必要：精子が水中を泳いで卵に到達する' },
+            { icon: '🍃', text: '葉裏に胞子囊群（ソーラス）をつける種が多い' },
+          ],
+          examples: ['ワラビ', 'ゼンマイ', 'スギナ（ツクシ）', 'イヌワラビ', 'ヤブソテツ', 'サンショウモ（水生）'],
+          children: []
+        },
+        {
+          id: 'seed', label: '種子植物', en: 'Spermatophyta', level: 2,
+          desc: '種子によって繁殖する最も進化した植物グループ。受精に水を必要とせず、乾燥した環境にも適応できます。',
+          features: [
+            { icon: '🌰', text: '種子：胚・栄養分・種皮の3層構造で子孫を守る' },
+            { icon: '🌬️', text: '花粉管：精細胞を卵細胞まで直接届けるシステム' },
+            { icon: '🌍', text: '陸上生態系の主役：地球の植生の大部分を占める' },
+          ],
+          examples: ['被子植物', '裸子植物'],
+          children: [
+            {
+              id: 'angio', label: '被子植物', en: 'Angiospermae', level: 3,
+              desc: '胚珠が子房に包まれた植物。「花」を咲かせ、果実を実らせることで種子を守り拡散させます。現在最も多様な植物グループで、約25万種が知られています。',
+              features: [
+                { icon: '🌸', text: '花：昆虫や鳥を引き寄せて受粉を助けてもらう高度な戦略' },
+                { icon: '🍎', text: '果実：動物に食べさせることで種子を遠くへ運ばせる' },
+                { icon: '🌡️', text: '二重受精：胚乳（栄養）と胚（芽）を同時に作る植物独自の仕組み' },
+              ],
+              examples: ['サクラ', 'バラ', 'チューリップ', 'イネ', 'トウモロコシ', 'リンゴ', 'タンポポ', 'アジサイ'],
+              children: [
+                {
+                  id: 'mono', label: '単子葉類', en: 'Monocotyledonae', level: 4,
+                  desc: '種子の中に子葉を1枚もつ植物グループ。葉脈が平行で、根は鬚根状。経済的に重要な穀物が多く含まれます。',
+                  features: [
+                    { icon: '🌾', text: '葉脈が平行：葉の維管束が平行に走る（区別の目印）' },
+                    { icon: '🌱', text: '子葉1枚：発芽時に出る最初の葉が1枚' },
+                    { icon: '🌸', text: '花弁は3の倍数：花びらが3・6枚のものが多い' },
+                  ],
+                  examples: ['イネ', 'トウモロコシ', 'ムギ', 'チューリップ', 'ユリ', 'ラン', 'バナナ', 'タケ'],
+                  children: []
+                },
+                {
+                  id: 'di', label: '双子葉類', en: 'Dicotyledonae', level: 4,
+                  desc: '種子に子葉を2枚もつ植物グループ。葉脈が網目状で多様な形態をとります。木本・草本どちらも含む最大のグループです。',
+                  features: [
+                    { icon: '🍂', text: '葉脈が網状：葉の維管束が網目状に広がる' },
+                    { icon: '🌲', text: '形成層あり：幹を太くする組織があり、大木になれる' },
+                    { icon: '🌺', text: '花弁は4か5の倍数：花びらが4・5・8・10枚など' },
+                  ],
+                  examples: ['サクラ', 'バラ', 'リンゴ', 'ダイズ', 'タンポポ', 'ヒマワリ', 'カシ', 'クヌギ'],
+                  children: []
+                }
+              ]
+            },
+            {
+              id: 'gymno', label: '裸子植物', en: 'Gymnospermae', level: 3,
+              desc: '胚珠がむき出し（子房に包まれていない）の種子植物。約3億5千万年前に出現した古いグループで、球果（まつぼっくり）などで種子を作ります。',
+              features: [
+                { icon: '🌲', text: '球果（まつぼっくり）：鱗片状の葉の間に胚珠がある' },
+                { icon: '🌬️', text: '風媒花：花粉を風で飛ばして受粉する（昆虫不要）' },
+                { icon: '🌿', text: '常緑性が多い：一年中葉をつけている種が大半' },
+              ],
+              examples: ['マツ', 'スギ', 'ヒノキ', 'イチョウ', 'ソテツ', 'コウヤマキ', 'カラマツ'],
+              children: []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: 'nonvascular', label: '非維管束植物', en: 'Non-vascular', level: 1,
+      desc: '維管束を持たない植物の総称。体全体から水分を直接吸収するため、乾燥に弱く湿った場所に生育します。陸上植物の中で最も原始的なグループ。',
+      features: [
+        { icon: '💧', text: '体全体で水分吸収：根・茎・葉の区別がなく全身で水を取り込む' },
+        { icon: '🌫️', text: '湿潤環境依存：乾燥に弱く、水辺・森の中に多い' },
+        { icon: '🧪', text: '大気環境のモニター：大気汚染に敏感で環境指標になる' },
+      ],
+      examples: ['ゼニゴケ', 'スギゴケ', 'ミズゴケ', 'ツノゴケ'],
+      children: [
+        {
+          id: 'moss', label: 'コケ植物', en: 'Bryophyta', level: 2,
+          desc: '維管束も根も持たない最も原始的な陸上植物。世界に約2万種が存在し、北極から熱帯まで幅広く分布。土壌形成にも重要な役割を担います。',
+          features: [
+            { icon: '🌿', text: '仮根：水分吸収ではなく、体を固定するためだけの器官' },
+            { icon: '💦', text: '受精に水が不可欠：精子が水中を泳いで卵細胞へ届く' },
+            { icon: '🌍', text: '裸地の先駆者：岩や砂漠跡地にいち早く定着する' },
+          ],
+          examples: ['ゼニゴケ', 'スギゴケ', 'ミズゴケ（泥炭形成）', 'ハイゴケ', 'タマゴケ'],
+          children: []
+        }
+      ]
+    }
+  ]
+};
+
+const ANIMAL_DATA = {
+  id: 'root', label: '動物界', en: 'Animalia', level: 0,
+  desc: '多細胞・従属栄養（他の生物を食べてエネルギーを得る）の真核生物の一群。現在約900万種以上が存在すると推定されています。',
+  features: [
+    { icon: '🍖', text: '従属栄養：自分で有機物を合成できず、他生物を食べる' },
+    { icon: '🏃', text: '運動能力：筋肉と神経系を持ち自発的に運動できる' },
+    { icon: '🧬', text: '多細胞生物：特殊化した細胞が協力して機能する' },
+  ],
+  examples: ['昆虫', '魚類', '哺乳類', '鳥類', 'タコ', 'ミミズ'],
+  children: [
+    {
+      id: 'vertebrate', label: '脊椎動物', en: 'Vertebrata', level: 1,
+      desc: '背骨（脊椎）を持つ動物の総称。全動物種の約3%に過ぎないが、大型で複雑な神経系・感覚器を持ち、生態系の上位を占めます。',
+      features: [
+        { icon: '🦴', text: '脊椎骨：神経系（脊髄）を保護する骨の連なり' },
+        { icon: '🧠', text: '脳の発達：複雑な行動・学習・感情処理が可能' },
+        { icon: '❤️', text: '閉鎖循環系：心臓と血管で全身に血液を送る' },
+      ],
+      examples: ['魚類', '両生類', '爬虫類', '鳥類', '哺乳類'],
+      children: [
+        {
+          id: 'mammal', label: '哺乳類', en: 'Mammalia', level: 2,
+          desc: '温血動物で、子を乳で育てる脊椎動物。毛（体毛）を持ち体温調節が可能。胎盤で子を育てるものが大半を占めます。',
+          features: [
+            { icon: '🤱', text: '授乳：乳腺から乳汁を分泌し子を育てる（哺乳類の定義）' },
+            { icon: '🌡️', text: '恒温性：外気温に関係なく体温を一定に保つ' },
+            { icon: '🦷', text: '異歯性：切歯・犬歯・臼歯と役割の異なる歯を持つ' },
+          ],
+          examples: ['ヒト', 'クジラ', 'コウモリ', 'ライオン', 'ゾウ', 'イルカ', 'コアラ'],
+          children: [
+            {
+              id: 'placental', label: '有胎盤類', en: 'Eutheria', level: 3,
+              desc: '胎盤を通じて母体内で子を十分に発育させる哺乳類。最も多様で成功したグループ。現在の哺乳類の約94%がこのグループ。',
+              features: [
+                { icon: '🤰', text: '胎盤：母体から胎児へ栄養・酸素を供給する器官' },
+                { icon: '🐣', text: '長い妊娠期間：体内でしっかり成長してから出産' },
+                { icon: '🌍', text: '全大陸に分布：海を含むほぼあらゆる環境に適応' },
+              ],
+              examples: ['ヒト（9ヶ月）', 'ゾウ（22ヶ月）', 'イルカ', 'コウモリ', 'ネコ', 'クジラ'],
+              children: []
+            },
+            {
+              id: 'marsupial', label: '有袋類', en: 'Marsupialia', level: 3,
+              desc: '未発達の状態で生まれ、母親の育児嚢（ポーチ）の中で授乳を受けながら成長する哺乳類。主にオーストラリアと南米に生息。',
+              features: [
+                { icon: '👜', text: '育児嚢：腹部のポーチで未熟な子が育つ' },
+                { icon: '🐾', text: '短い妊娠期間：クアッカはわずか27日で産まれる' },
+                { icon: '🦘', text: 'オーストラリアで多様化：大陸分離後に独自進化した' },
+              ],
+              examples: ['カンガルー', 'コアラ', 'ウォンバット', 'タスマニアデビル', 'オポッサム'],
+              children: []
+            },
+            {
+              id: 'monotreme', label: '単孔類', en: 'Monotremata', level: 3,
+              desc: '哺乳類でありながら卵を産む最も原始的なグループ。乳首はなく腹部の皮膚から乳汁を滲み出させて授乳します。現生は5種のみ。',
+              features: [
+                { icon: '🥚', text: '産卵：哺乳類でありながら革質の卵を産む' },
+                { icon: '⚡', text: '電気感覚：カモノハシは電気を感じて獲物を探知する' },
+                { icon: '🌡️', text: '変温寄り：哺乳類の中で最も低い体温（32℃前後）' },
+              ],
+              examples: ['カモノハシ', 'ハリモグラ（ショートビーク）', 'ミナミハリモグラ'],
+              children: []
+            }
+          ]
+        },
+        {
+          id: 'bird', label: '鳥類', en: 'Aves', level: 2,
+          desc: '羽毛と翼を持ち、恒温性の脊椎動物。卵を産み、外温性の爬虫類から進化した。現生約1万種で空中・陸上・水中に適応。',
+          features: [
+            { icon: '🪺', text: '卵生：硬い殻の卵を産み、抱卵して孵化させる' },
+            { icon: '🪶', text: '羽毛：飛翔・保温・ディスプレイに使われる高度な構造' },
+            { icon: '🦴', text: '中空骨：軽量化のため骨内部が空洞になっている' },
+          ],
+          examples: ['スズメ', 'ワシ', 'ペンギン（飛べない）', 'ダチョウ', 'フクロウ', 'オウム', 'ツバメ'],
+          children: []
+        },
+        {
+          id: 'reptile', label: '爬虫類', en: 'Reptilia', level: 2,
+          desc: '鱗または甲羅を持つ変温性の脊椎動物。卵生が多いが卵胎生（体内で孵化）もいる。約3億年前に両生類から進化し、恐竜もこのグループに含まれます。',
+          features: [
+            { icon: '🌡️', text: '変温性：外気温に依存して体温が変化する' },
+            { icon: '🐍', text: '鱗：乾燥を防ぐケラチン製の鱗が体を覆う' },
+            { icon: '🥚', text: '陸上産卵：羊膜卵（乾燥に耐える殻付き卵）を産む種が多い' },
+          ],
+          examples: ['ヘビ', 'トカゲ', 'ワニ', 'カメ', 'イグアナ', 'コモドドラゴン', 'ヤモリ'],
+          children: []
+        },
+        {
+          id: 'amphibian', label: '両生類', en: 'Amphibia', level: 2,
+          desc: '幼生期は水中でエラ呼吸、成体は陸上で肺・皮膚呼吸をする脊椎動物。皮膚は湿っており常に水分補給が必要。約3億6千万年前に魚類から進化しました。',
+          features: [
+            { icon: '🔄', text: '変態：おたまじゃくし→カエルのように大変身する' },
+            { icon: '🫁', text: '皮膚呼吸：皮膚からも酸素を吸収する（肺と併用）' },
+            { icon: '💧', text: '水に依存：皮膚が乾くと窒息するため水辺を離れられない' },
+          ],
+          examples: ['カエル', 'イモリ', 'サンショウウオ', 'アシナシイモリ', 'ウーパールーパー'],
+          children: []
+        },
+        {
+          id: 'fish', label: '魚類', en: 'Pisces', level: 2,
+          desc: '水中生活に適応した顎を持つ脊椎動物の総称（単系統ではない）。エラで呼吸し、鰭で遊泳する。約3億2千万年前から存在する最古の脊椎動物グループ。',
+          features: [
+            { icon: '🐟', text: 'エラ呼吸：水から溶存酸素を取り込む器官' },
+            { icon: '🌊', text: '側線器官：水の振動や流れを感じる感覚器' },
+            { icon: '🥚', text: '体外受精が多数：水中に卵と精子を放出して受精させる' },
+          ],
+          examples: ['マグロ', 'サケ', 'サメ（軟骨魚）', 'コイ', 'フグ', 'チョウザメ（肺魚に近縁）'],
+          children: []
+        }
+      ]
+    },
+    {
+      id: 'invertebrate', label: '無脊椎動物', en: 'Invertebrata', level: 1,
+      desc: '背骨を持たない動物の総称。動物種の約97%を占める圧倒的多数派。昆虫・甲殻類・貝類・タコ・クラゲなど非常に多様なグループから成ります。',
+      features: [
+        { icon: '🦷', text: '外骨格または軟体：クチクラや殻で体を支える（種による）' },
+        { icon: '🌊', text: '多様な生息域：深海・砂漠・寄生生活まであらゆる場所に適応' },
+        { icon: '🔢', text: '圧倒的な種数：昆虫だけで約100万種以上が記載されている' },
+      ],
+      examples: ['昆虫', 'タコ', 'ウニ', 'ミミズ', 'クラゲ', 'エビ'],
+      children: [
+        {
+          id: 'arthropod', label: '節足動物', en: 'Arthropoda', level: 2,
+          desc: '外骨格（キチン質）・体節・関節のある付属肢を持つ動物。地球上で最も成功した動物門で、約120万種以上が知られています。',
+          features: [
+            { icon: '🦴', text: '外骨格：体の外側を覆うキチン質の硬い殻' },
+            { icon: '🔄', text: '脱皮：成長するために外骨格を周期的に脱ぎ捨てる' },
+            { icon: '🦵', text: '関節付属肢：折れ曲がる脚・触角・顎などを持つ' },
+          ],
+          examples: ['昆虫', 'クモ', 'エビ・カニ', 'ムカデ', 'ダニ'],
+          children: [
+            {
+              id: 'insect', label: '昆虫類', en: 'Insecta', level: 3,
+              desc: '頭部・胸部・腹部の3つの体節と6本の脚を持つ節足動物。約100万種が記載されており、動物界で最大の多様性を誇ります。',
+              features: [
+                { icon: '🦋', text: '完全変態・不完全変態：幼虫→さなぎ→成虫などの段階的変化' },
+                { icon: '🌸', text: '花粉媒介：ミツバチやチョウが植物の受粉を助ける' },
+                { icon: '🏋️', text: 'カブトムシは自体重の850倍の重さを持ち上げられる' },
+              ],
+              examples: ['カブトムシ', 'チョウ', 'ミツバチ', 'トンボ', 'バッタ', 'アリ', 'ホタル'],
+              children: []
+            },
+            {
+              id: 'crustacean', label: '甲殻類', en: 'Crustacea', level: 3,
+              desc: '主に水中に生息する節足動物。2対の触角と分岐した付属肢を持ちます。約6万7千種が存在し、海洋生態系で重要な役割を担います。',
+              features: [
+                { icon: '🦞', text: 'カルシウム外骨格：炭酸カルシウムを含む硬い殻' },
+                { icon: '🌊', text: '主に水中生活：海水・淡水・陸上（ダンゴムシ等）に適応' },
+                { icon: '🥚', text: '卵を腹部に抱えて孵化するまで保護する種が多い' },
+              ],
+              examples: ['エビ', 'カニ', 'ザリガニ', 'フジツボ', 'ダンゴムシ', 'ミジンコ', 'オキアミ'],
+              children: []
+            },
+            {
+              id: 'arachnid', label: '蜘蛛類', en: 'Arachnida', level: 3,
+              desc: '頭胸部・腹部の2節と8本の脚を持つ節足動物。触角・複眼を持たず、単眼のみを持ちます。主に陸上で肉食性の生活を送ります。',
+              features: [
+                { icon: '🕸️', text: '糸腺：絹糸を産出する器官（全てのクモが持つわけではない）' },
+                { icon: '👁️', text: '単眼のみ：複眼を持たず複数の単眼で視覚を補う' },
+                { icon: '☠️', text: '毒腺：獲物の麻痺・消化に使う毒を産出する種が多い' },
+              ],
+              examples: ['クモ', 'サソリ', 'ダニ', 'マダニ', 'カブトガニ（近縁）'],
+              children: []
+            }
+          ]
+        },
+        {
+          id: 'mollusca', label: '軟体動物', en: 'Mollusca', level: 2,
+          desc: '柔らかい体を持ち、多くは石灰質の貝殻を持つ動物門。約10万種以上が知られ、節足動物に次ぐ多様な動物グループです。',
+          features: [
+            { icon: '🐚', text: '外套膜：貝殻を分泌する体の覆い（軟体動物の特徴）' },
+            { icon: '👅', text: '歯舌（ラデュラ）：ヤスリ状の口器で藻類などを削り取る' },
+            { icon: '🦑', text: 'タコ・イカは貝殻を退化・内在化させて高度な知性を獲得' },
+          ],
+          examples: ['アサリ', 'タコ', 'イカ', 'カタツムリ', 'ナメクジ', 'アワビ', 'オウムガイ'],
+          children: []
+        },
+        {
+          id: 'echinoderm', label: '棘皮動物', en: 'Echinodermata', level: 2,
+          desc: '五放射相称の体と、水管系という独特の器官系を持つ海洋動物。脊椎動物に最も近い無脊椎動物のグループとされています。',
+          features: [
+            { icon: '⭐', text: '五放射相称：体が5本の腕・5つの部分に対称的に分かれる' },
+            { icon: '💧', text: '水管系：体内の水圧で管足を動かして移動・捕食する' },
+            { icon: '🔄', text: '再生能力：腕や内臓を切断されても再生できる種がいる' },
+          ],
+          examples: ['ヒトデ', 'ウニ', 'ナマコ', 'クモヒトデ', 'ウミユリ', 'タコノマクラ'],
+          children: []
+        },
+        {
+          id: 'annelid', label: '環形動物', en: 'Annelida', level: 2,
+          desc: '体が多数の体節（環節）に分かれた動物。閉鎖循環系と神経索を持ち、土壌生態系や水生生態系で重要な役割を担います。',
+          features: [
+            { icon: '🔗', text: '体節制：体が多数の環状の節に分かれている構造' },
+            { icon: '🌱', text: 'ミミズの土壌改良：掘削・排泄で土を豊かにする' },
+            { icon: '🩸', text: '閉鎖循環系：心臓に相当する器官と血管で循環する' },
+          ],
+          examples: ['ミミズ', 'ゴカイ', 'ヒル', 'チューブワーム（深海）'],
+          children: []
+        },
+        {
+          id: 'cnidaria', label: '刺胞動物', en: 'Cnidaria', level: 2,
+          desc: '刺胞（毒針を含む細胞器官）を持つ最も単純な動物グループの一つ。体は放射相称で、消化腔が一つだけある袋状の構造を持ちます。',
+          features: [
+            { icon: '⚡', text: '刺胞：触れると毒針を発射する特殊な細胞器官' },
+            { icon: '🔄', text: 'ポリプ型とクラゲ型：世代交代で形が変わる種がいる' },
+            { icon: '🪸', text: '造礁サンゴ：石灰質の骨格でサンゴ礁を作り生態系を支える' },
+          ],
+          examples: ['クラゲ', 'イソギンチャク', 'サンゴ', 'ヒドラ', 'カツオノエボシ'],
+          children: []
+        }
+      ]
+    }
+  ]
+};
+
+// ═══════════════════════════════════════════
+// THREE.JS SETUP
+// ═══════════════════════════════════════════
+const container = document.getElementById('canvas-container');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.setClearColor(0x080c10, 1);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 0.1, 1000);
+camera.position.set(0, 0, 22);
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+scene.add(ambient);
+const pointA = new THREE.PointLight(0x52b788, 1.2, 60);
+pointA.position.set(-10, 10, 10);
+scene.add(pointA);
+const pointB = new THREE.PointLight(0x29b6f6, 1.0, 60);
+pointB.position.set(10, -8, 8);
+scene.add(pointB);
+
+// Stars background
+const starGeo = new THREE.BufferGeometry();
+const starCount = 600;
+const starPositions = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount * 3; i++) starPositions[i] = (Math.random() - 0.5) * 200;
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, transparent: true, opacity: 0.4 });
+scene.add(new THREE.Points(starGeo, starMat));
+
+// ═══════════════════════════════════════════
+// ORBIT CONTROLS (manual)
+// ═══════════════════════════════════════════
+let isDragging = false, prevX = 0, prevY = 0;
+let rotX = 0.2, rotY = 0;
+let targetRotX = 0.2, targetRotY = 0;
+let zoom = 22, targetZoom = 22;
+let touchDist = null;
+
+const pivot = new THREE.Group();
+scene.add(pivot);
+
+renderer.domElement.addEventListener('mousedown', e => { isDragging = true; prevX = e.clientX; prevY = e.clientY; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  targetRotY += (e.clientX - prevX) * 0.008;
+  targetRotX += (e.clientY - prevY) * 0.008;
+  targetRotX = Math.max(-1.2, Math.min(1.2, targetRotX));
+  prevX = e.clientX; prevY = e.clientY;
+});
+renderer.domElement.addEventListener('wheel', e => {
+  targetZoom += e.deltaY * 0.05;
+  targetZoom = Math.max(8, Math.min(40, targetZoom));
+});
+renderer.domElement.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { isDragging = true; prevX = e.touches[0].clientX; prevY = e.touches[0].clientY; }
+  if (e.touches.length === 2) { touchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
+}, { passive: true });
+renderer.domElement.addEventListener('touchend', () => { isDragging = false; touchDist = null; }, { passive: true });
+renderer.domElement.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && isDragging) {
+    targetRotY += (e.touches[0].clientX - prevX) * 0.008;
+    targetRotX += (e.touches[0].clientY - prevY) * 0.008;
+    targetRotX = Math.max(-1.2, Math.min(1.2, targetRotX));
+    prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+  }
+  if (e.touches.length === 2 && touchDist !== null) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    targetZoom -= (d - touchDist) * 0.05;
+    targetZoom = Math.max(8, Math.min(40, targetZoom));
+    touchDist = d;
+  }
+}, { passive: true });
+
+// ═══════════════════════════════════════════
+// NODE BUILDING
+// ═══════════════════════════════════════════
+const COLORS = {
+  plant: [0x52b788, 0x40916c, 0x2d6a4f, 0x1b4332, 0x081c15],
+  animal: [0x4fc3f7, 0x0288d1, 0x01579b, 0x0d47a1, 0x001970]
+};
+const SIZES = [1.4, 1.05, 0.82, 0.65, 0.52];
+
+let nodeObjects = [];
+let edgeObjects = [];
+let currentTab = 'plant';
+let labelSprites = [];
+
+function makeSprite(text, color) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 512; canvas.height = 128;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = `rgba(8,12,16,0.75)`;
+  ctx.beginPath(); ctx.roundRect(8, 20, canvas.width - 16, canvas.height - 36, 18);
+  ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(8, 20, canvas.width - 16, canvas.height - 36, 18);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 38px "Zen Kaku Gothic New", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(5, 1.25, 1);
+  return sprite;
+}
+
+function buildTree(data, tab) {
+  // clear
+  nodeObjects.forEach(o => pivot.remove(o.mesh));
+  edgeObjects.forEach(o => pivot.remove(o));
+  labelSprites.forEach(s => pivot.remove(s));
+  nodeObjects = []; edgeObjects = []; labelSprites = [];
+
+  const palette = COLORS[tab];
+
+  function placeNode(node, pos, parentPos, depth) {
+    const size = SIZES[Math.min(depth, SIZES.length - 1)];
+    const col = palette[Math.min(depth, palette.length - 1)];
+
+    const geo = new THREE.SphereGeometry(size, 28, 28);
+    const mat = new THREE.MeshStandardMaterial({
+      color: col, emissive: col, emissiveIntensity: 0.25,
+      metalness: 0.3, roughness: 0.55,
+      transparent: true, opacity: 0.92
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    pivot.add(mesh);
+
+    // Glow ring
+    const ringGeo = new THREE.RingGeometry(size + 0.08, size + 0.22, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    mesh.add(ring);
+
+    // Label
+    const hexColor = '#' + col.toString(16).padStart(6, '0');
+    const sprite = makeSprite(node.label, hexColor);
+    sprite.position.set(pos.x, pos.y + size + 1.0, pos.z);
+    pivot.add(sprite);
+    labelSprites.push(sprite);
+
+    // Edge to parent
+    if (parentPos) {
+      const dir = new THREE.Vector3().subVectors(pos, parentPos);
+      const mid = new THREE.Vector3().addVectors(parentPos, pos).multiplyScalar(0.5);
+      const len = dir.length();
+      const edgeGeo = new THREE.CylinderGeometry(0.04, 0.04, len, 8);
+      const edgeMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3 });
+      const edge = new THREE.Mesh(edgeGeo, edgeMat);
+      edge.position.copy(mid);
+      edge.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      pivot.add(edge);
+      edgeObjects.push(edge);
+    }
+
+    nodeObjects.push({ mesh, data: node, baseColor: col, baseEmissive: 0.25 });
+
+    // Children
+    if (node.children && node.children.length > 0) {
+      const n = node.children.length;
+      const radius = 4.5 + depth * 1.5;
+      const yStep = -3.8;
+      node.children.forEach((child, i) => {
+        const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+        const childPos = new THREE.Vector3(
+          pos.x + Math.cos(angle) * radius,
+          pos.y + yStep,
+          pos.z + Math.sin(angle) * radius
+        );
+        placeNode(child, childPos, pos, depth + 1);
+      });
+    }
+  }
+
+  placeNode(data, new THREE.Vector3(0, 6, 0), null, 0);
+}
+
+// ═══════════════════════════════════════════
+// RAYCASTING / CLICK
+// ═══════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredNode = null;
+const tooltip = document.getElementById('tooltip');
+
+function getIntersected(cx, cy) {
+  mouse.x = (cx / container.clientWidth) * 2 - 1;
+  mouse.y = -(cy / container.clientHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = nodeObjects.map(n => n.mesh);
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (hits.length > 0) return nodeObjects.find(n => n.mesh === hits[0].object);
+  return null;
+}
+
+renderer.domElement.addEventListener('mousemove', e => {
+  const hit = getIntersected(e.clientX, e.clientY);
+  if (hit) {
+    renderer.domElement.style.cursor = 'pointer';
+    tooltip.style.opacity = '1';
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY - 10) + 'px';
+    tooltip.textContent = hit.data.label + (hit.data.en ? '  ' + hit.data.en : '');
+    if (hoveredNode && hoveredNode !== hit) resetNodeColor(hoveredNode);
+    hoverNode(hit);
+    hoveredNode = hit;
+  } else {
+    renderer.domElement.style.cursor = 'default';
+    tooltip.style.opacity = '0';
+    if (hoveredNode) { resetNodeColor(hoveredNode); hoveredNode = null; }
+  }
+});
+
+function hoverNode(n) {
+  n.mesh.material.emissiveIntensity = 0.8;
+  n.mesh.scale.setScalar(1.15);
+}
+function resetNodeColor(n) {
+  n.mesh.material.emissiveIntensity = n.baseEmissive;
+  n.mesh.scale.setScalar(1);
+}
+
+let clickStart = { x: 0, y: 0 };
+renderer.domElement.addEventListener('mousedown', e => { clickStart = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('mouseup', e => {
+  if (Math.abs(e.clientX - clickStart.x) < 5 && Math.abs(e.clientY - clickStart.y) < 5) {
+    const hit = getIntersected(e.clientX, e.clientY);
+    if (hit) openPanel(hit.data);
+  }
+});
+
+renderer.domElement.addEventListener('touchend', e => {
+  if (e.changedTouches.length === 1) {
+    const t = e.changedTouches[0];
+    const hit = getIntersected(t.clientX, t.clientY);
+    if (hit) openPanel(hit.data);
+  }
+}, { passive: true });
+
+// ═══════════════════════════════════════════
+// PANEL
+// ═══════════════════════════════════════════
+function openPanel(data) {
+  const isPlant = currentTab === 'plant';
+  const badgeClass = isPlant ? 'badge-plant' : 'badge-animal';
+  const badgeLabel = isPlant ? '植物界' : '動物界';
+
+  const exHtml = (data.examples || []).map(e =>
+    `<span class="example-chip">${e}</span>`
+  ).join('');
+
+  const featHtml = (data.features || []).map(f =>
+    `<div class="feature"><span class="feature-icon">${f.icon}</span><span class="feature-text">${f.text}</span></div>`
+  ).join('');
+
+  document.getElementById('panel-content').innerHTML = `
+    <span class="panel-badge ${badgeClass}">${badgeLabel}</span>
+    <h2>${data.label}</h2>
+    <p class="subtitle">${data.en || ''}</p>
+    <p class="panel-desc">${data.desc}</p>
+    ${featHtml ? `<p class="section-title">特徴</p><div class="features">${featHtml}</div>` : ''}
+    ${exHtml ? `<p class="section-title" style="margin-top:18px">代表例</p><div class="examples">${exHtml}</div>` : ''}
+  `;
+  document.getElementById('panel-overlay').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('panel-overlay').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════
+function switchTab(tab) {
+  currentTab = tab;
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => t.className = 'tab');
+  if (tab === 'plant') {
+    tabs[0].classList.add('active-plant');
+    pointA.color.set(0x52b788); pointB.color.set(0x40916c);
+    buildTree(PLANT_DATA, 'plant');
+  } else {
+    tabs[1].classList.add('active-animal');
+    pointA.color.set(0x29b6f6); pointB.color.set(0x4fc3f7);
+    buildTree(ANIMAL_DATA, 'animal');
+  }
+  targetRotX = 0.2; targetRotY = 0;
+  targetZoom = 22;
+  closePanel();
+}
+
+// ═══════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════
+window.addEventListener('resize', () => {
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+});
+
+// ═══════════════════════════════════════════
+// ANIMATE
+// ═══════════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Smooth orbit
+  rotX += (targetRotX - rotX) * 0.08;
+  rotY += (targetRotY - rotY) * 0.08;
+  zoom += (targetZoom - zoom) * 0.08;
+  pivot.rotation.x = rotX;
+  pivot.rotation.y = rotY;
+  camera.position.z = zoom;
+
+  // Pulse nodes
+  nodeObjects.forEach((n, i) => {
+    if (n === hoveredNode) return;
+    const pulse = 1 + 0.04 * Math.sin(t * 1.5 + i * 0.7);
+    n.mesh.scale.setScalar(pulse);
+  });
+
+  // Keep labels facing camera
+  labelSprites.forEach(s => { s.material.rotation = 0; });
+
+  renderer.render(scene, camera);
+}
+
+// Init
+buildTree(PLANT_DATA, 'plant');
+animate();
+</script>
+
+</body>
+</html>
