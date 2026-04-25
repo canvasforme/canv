@@ -225,13 +225,12 @@ button.loading {
       btn.textContent = "Redirecting...";
 
       setTimeout(() => {
-         window.location.href = REDIRECT_URL; 
-        alert("リダイレクト先のURLを REDIRECT_URL に設定してください。");
+         window.location.href = REDIRECT_URL;
         btn.classList.remove("loading");
         btn.textContent = "Login";
       }, 800);
     } else {
-      msg.textContent = "ID またはパスワードが正しくありません。";
+      msg.textContent = "Invaild ID or Password";
       msg.className = "msg";
       card.classList.remove("shake");
       void card.offsetWidth; // reflow
